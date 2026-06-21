@@ -179,6 +179,76 @@ body {
   color: white;
 }
 
+.tag-filter {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.tag-chip:hover {
+  background: var(--bg-tertiary);
+}
+
+.tag-chip.active {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.course-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.course-tag {
+  padding: 1px 8px;
+  background: var(--bg-tertiary);
+  border-radius: 9999px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.day-duration-over {
+  color: var(--danger) !important;
+  font-weight: 600;
+}
+
+.day-duration-warning {
+  color: var(--warning) !important;
+  font-weight: 600;
+}
+
+.day-duration-ok {
+  color: var(--success) !important;
+}
+
+.calendar-day.over-target {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+}
+
+.calendar-day.near-target {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
 .course-list {
   flex: 1;
   overflow-y: auto;

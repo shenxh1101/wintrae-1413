@@ -73,7 +73,7 @@ export function getDaysDiff(date1, date2) {
 
 export function isOverdue(date) {
   if (!date) return false;
-  return getDaysDiff(new Date(), new Date(date)) > 0;
+  return getDaysDiff(new Date(), new Date(date)) < 0;
 }
 
 export function isToday(date) {

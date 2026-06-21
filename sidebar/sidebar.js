@@ -33,6 +33,7 @@ const STATE = {
   searchQuery: '',
   statusFilter: 'all',
   platformFilter: [],
+  tagFilter: [],
   expandedCourses: new Set(),
   courses: [],
   chapters: [],
@@ -67,6 +68,7 @@ async function loadAllData() {
 function renderAll() {
   renderStreak();
   renderPlatformFilters();
+  renderTagFilters();
   renderCourseList();
   renderPlanner();
   renderNotes();
@@ -161,6 +163,42 @@ function renderPlatformFilters() {
   });
 }
 
+function renderTagFilters() {
+  const container = document.getElementById('tagFilter');
+  const allTags = new Set();
+  STATE.courses.forEach(c => {
+    (c.tags || []).forEach(t => allTags.add(t));
+  });
+
+  if (allTags.size === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  const sortedTags = Array.from(allTags).sort();
+  container.innerHTML = sortedTags.map(tag => {
+    const active = STATE.tagFilter.includes(tag);
+    return `<button class="tag-chip ${active ? 'active' : ''}" data-tag="${escapeAttr(tag)}">
+      🏷 ${escapeHtml(tag)}
+    </button>`;
+  }).join('');
+
+  container.querySelectorAll('.tag-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const tag = chip.dataset.tag;
+      const idx = STATE.tagFilter.indexOf(tag);
+      if (idx >= 0) {
+        STATE.tagFilter.splice(idx, 1);
+      } else {
+        STATE.tagFilter.push(tag);
+      }
+      renderTagFilters();
+      renderCourseList();
+    });
+  });
+}
+
 function getFilteredCourses() {
   let courses = [...STATE.courses];
 
@@ -168,9 +206,17 @@ function getFilteredCourses() {
     courses = courses.filter(c => STATE.platformFilter.includes(c.platform));
   }
 
+  if (STATE.tagFilter.length > 0) {
+    courses = courses.filter(c => {
+      const courseTags = c.tags || [];
+      return STATE.tagFilter.some(t => courseTags.includes(t));
+    });
+  }
+
   if (STATE.searchQuery) {
     courses = courses.filter(c => {
       if (c.name.toLowerCase().includes(STATE.searchQuery)) return true;
+      if ((c.tags || []).some(t => t.toLowerCase().includes(STATE.searchQuery))) return true;
       const chapters = STATE.chapters.filter(ch => ch.courseId === c.id);
       return chapters.some(ch => ch.name.toLowerCase().includes(STATE.searchQuery));
     });
@@ -215,7 +261,7 @@ function renderCourseList() {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">📖</div>
-        <div class="empty-state-text">${STATE.searchQuery || STATE.platformFilter.length > 0 || STATE.statusFilter !== 'all' ? '没有符合条件的课程' : '还没有保存的课程<br>在课程页面点击右下角按钮开始记录'}</div>
+        <div class="empty-state-text">${STATE.searchQuery || STATE.platformFilter.length > 0 || STATE.tagFilter.length > 0 || STATE.statusFilter !== 'all' ? '没有符合条件的课程' : '还没有保存的课程<br>在课程页面点击右下角按钮开始记录'}</div>
       </div>
     `;
     return;
@@ -230,6 +276,7 @@ function renderCourseList() {
       ? Math.round((completedCount / allChapters.length) * 100)
       : 0;
     const expanded = STATE.expandedCourses.has(course.id);
+    const courseTags = (course.tags || []).slice(0, 5);
 
     return `
       <div class="course-card ${expanded ? 'expanded' : ''}" data-course-id="${course.id}">
@@ -244,6 +291,11 @@ function renderCourseList() {
               <span>·</span>
               <span>${completedCount}/${allChapters.length}已完成</span>
             </div>
+            ${courseTags.length > 0 ? `
+              <div class="course-tags">
+                ${courseTags.map(t => `<span class="course-tag">🏷 ${escapeHtml(t)}</span>`).join('')}
+              </div>
+            ` : ''}
             <div class="course-progress mt-2">
               <div class="course-progress-bar">
                 <div class="course-progress-fill" style="width:${totalProgress}%"></div>
@@ -551,6 +603,8 @@ function renderPlanner() {
     dayPlans[key] = STATE.plans.filter(p => p.date === key);
   });
 
+  const dailyTarget = calcDailyTarget();
+
   container.innerHTML = `
     <div class="planner-container" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
       <div class="planner-stats" style="padding:12px 16px;background:var(--bg-primary);border-bottom:1px solid var(--border)">
@@ -566,9 +620,14 @@ function renderPlanner() {
             <div style="font-size:11px;color:var(--text-muted)">已逾期</div>
           </div>
           <div class="card" style="padding:10px;text-align:center">
-            <div style="font-size:20px;font-weight:700;color:var(--info)">${formatDuration(calcDailyTarget())}</div>
+            <div style="font-size:20px;font-weight:700;color:var(--info)">${formatDuration(dailyTarget)}</div>
             <div style="font-size:11px;color:var(--text-muted)">每日目标</div>
           </div>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px">
+          <span class="day-duration-ok">● 达标</span> &nbsp;
+          <span class="day-duration-warning">● 接近目标(80%)</span> &nbsp;
+          <span class="day-duration-over">● 超出目标</span>
         </div>
       </div>
       
@@ -606,23 +665,41 @@ function renderPlanner() {
                 const ch = STATE.chapters.find(c => c.id === p.chapterId);
                 return sum + (ch?.duration || 0);
               }, 0);
+              
+              let durationClass = 'day-duration-ok';
+              let dayClass = '';
+              if (dailyTarget > 0) {
+                const ratio = totalSeconds / dailyTarget;
+                if (ratio > 1) {
+                  durationClass = 'day-duration-over';
+                  dayClass = 'over-target';
+                } else if (ratio >= 0.8) {
+                  durationClass = 'day-duration-warning';
+                  dayClass = 'near-target';
+                }
+              }
+              
               return `
-                <div class="calendar-day card ${isToday ? 'today' : ''}" 
+                <div class="calendar-day card ${isToday ? 'today' : ''} ${dayClass}" 
                      data-date="${key}"
                      style="padding:8px;min-height:120px;${isToday ? 'border:2px solid var(--primary);' : ''}">
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
                     <span style="font-weight:600;font-size:13px">${d.getMonth() + 1}/${d.getDate()}</span>
                     <span style="font-size:10px;color:var(--text-muted)">${['日','一','二','三','四','五','六'][d.getDay()]}</span>
                   </div>
-                  <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px">${formatDuration(totalSeconds)}</div>
+                  <div style="font-size:10px;margin-bottom:6px" class="${durationClass}">
+                    ⏱ ${formatDuration(totalSeconds)}
+                    ${dailyTarget > 0 ? ` <span style="opacity:0.7">/ ${formatDuration(dailyTarget)}</span>` : ''}
+                    ${totalSeconds > dailyTarget && dailyTarget > 0 ? ' ⚠️' : ''}
+                  </div>
                   <div class="day-plans" style="display:flex;flex-direction:column;gap:4px">
                     ${plans.map(p => {
                       const ch = STATE.chapters.find(c => c.id === p.chapterId);
                       if (!ch) return '';
                       return `
                         <div class="plan-item" style="padding:4px 6px;background:var(--bg-tertiary);border-radius:4px;font-size:11px;display:flex;justify-content:space-between;align-items:center;gap:4px">
-                          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(ch.name)}</span>
-                          <button class="plan-delete" data-plan-id="${p.id}" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:12px">×</button>
+                          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(ch.name)}">${escapeHtml(ch.name)}</span>
+                          <button class="plan-delete" data-plan-id="${p.id}" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:12px;flex-shrink:0">×</button>
                         </div>
                       `;
                     }).join('')}
@@ -836,7 +913,7 @@ function renderReminders() {
   const upcoming = STATE.chapters.filter(c => {
     if (c.completed || !c.dueDate) return false;
     const diff = getDaysDiff(new Date(), new Date(c.dueDate));
-    return diff > 0 && diff <= 3;
+    return diff > 0 && diff <= 7;
   }).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
 
   const reviewNotes = STATE.notes.filter(n => n.needsReview);

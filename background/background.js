@@ -161,15 +161,51 @@ async function handleMessage(message, sender) {
       await deleteCourse(message.payload);
       return { success: true };
 
-    case 'OPEN_CHAPTER':
-      const { url } = message.payload;
+    case 'OPEN_CHAPTER': {
+      const { url, position } = message.payload;
+      let targetTabId = null;
+      
       if (sender.tab?.windowId) {
-        await chrome.tabs.update(sender.tab.id, { url });
+        try {
+          await chrome.tabs.update(sender.tab.id, { url });
+          targetTabId = sender.tab.id;
+        } catch (e) {
+          const tab = await chrome.tabs.create({ url, active: true });
+          targetTabId = tab.id;
+        }
       } else {
-        await chrome.tabs.create({ url, active: true });
+        const tab = await chrome.tabs.create({ url, active: true });
+        targetTabId = tab.id;
       }
+      
       await updateStreak();
+
+      if (position && position > 0) {
+        const maxAttempts = 15;
+        let attempts = 0;
+        
+        const trySeek = async () => {
+          if (attempts >= maxAttempts) return;
+          attempts++;
+          
+          try {
+            const result = await chrome.tabs.sendMessage(targetTabId, {
+              type: 'SEEK_TO_POSITION',
+              payload: { position }
+            });
+            if (!result || !result.success) {
+              setTimeout(trySeek, 1000);
+            }
+          } catch (e) {
+            setTimeout(trySeek, 1000);
+          }
+        };
+        
+        setTimeout(trySeek, 1500);
+      }
+      
       return { success: true };
+    }
 
     default:
       return { success: false, error: 'Unknown message type' };

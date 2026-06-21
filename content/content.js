@@ -60,26 +60,58 @@
       tencent: {
         course: '.title-h1, h1',
         chapter: '.study-chapter.active, .chapter-title, .task-name'
+      },
+      other: {
+        course: 'h1, .title, [class*="title" i], [class*="name" i]',
+        chapter: 'h2, h3, [class*="chapter" i], [class*="section" i], [class*="lesson" i]'
       }
     };
 
     const selectors = platformSelectors[platform] || platformSelectors.other;
     
-    const courseEl = document.querySelector(selectors.course);
-    if (courseEl) info.courseName = courseEl.textContent.trim();
+    const courseCandidates = [
+      document.querySelector(selectors.course),
+      document.querySelector('h1'),
+      document.querySelector('[property="og:title"]'),
+      document.querySelector('meta[name="title"]')
+    ].filter(Boolean);
     
-    const chapterEl = document.querySelector(selectors.chapter);
-    if (chapterEl) info.chapterName = chapterEl.textContent.trim();
+    for (const el of courseCandidates) {
+      const text = (el.content || el.textContent || '').trim();
+      if (text && text.length > 0 && text.length < 200) {
+        info.courseName = text;
+        break;
+      }
+    }
+    
+    const chapterCandidates = [
+      document.querySelector(selectors.chapter),
+      document.querySelector('h2'),
+      document.querySelector('h3')
+    ].filter(Boolean);
+    
+    for (const el of chapterCandidates) {
+      const text = el.textContent.trim();
+      if (text && text.length > 0 && text.length < 200 && text !== info.courseName) {
+        info.chapterName = text;
+        break;
+      }
+    }
 
     if (!info.chapterName) {
       const heading = document.querySelector('h1, h2');
-      if (heading && heading !== document.querySelector(selectors.course)) {
+      if (heading && heading.textContent.trim() !== info.courseName) {
         info.chapterName = heading.textContent.trim();
       }
     }
 
     info.courseName = info.courseName || document.title;
     info.chapterName = info.chapterName || info.courseName;
+
+    const hostname = location.hostname.replace('www.', '');
+    if (platform === 'other' && !info._platformNameInjected) {
+      info.siteName = hostname;
+    }
 
     return info;
   }
@@ -533,7 +565,76 @@
     }, 10000);
   }
 
+  function setupMessageListener() {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === 'SEEK_TO_POSITION') {
+        handleSeekRequest(message.payload.position)
+          .then(result => sendResponse(result))
+          .catch(e => sendResponse({ success: false, error: e.message }));
+        return true;
+      }
+    });
+  }
+
+  async function handleSeekRequest(targetPosition) {
+    if (!targetPosition || targetPosition < 0) {
+      return { success: false, error: '无效的播放位置' };
+    }
+
+    let attempts = 0;
+    const maxAttempts = 20;
+    
+    const trySeek = () => new Promise((resolve) => {
+      const attempt = () => {
+        attempts++;
+        updateVideoState();
+        const video = findVideo();
+        
+        if (video && !isNaN(video.duration) && video.duration > 0) {
+          try {
+            if (targetPosition > video.duration) {
+              showToast('⚠️ 记录的位置超出视频时长，已打开页面');
+              resolve({ success: true, adjusted: true });
+              return;
+            }
+            
+            video.currentTime = targetPosition;
+            
+            setTimeout(() => {
+              if (Math.abs(video.currentTime - targetPosition) < 2 || attempts >= maxAttempts) {
+                const timeStr = formatTime(targetPosition);
+                showToast(`✅ 已跳转到 ${timeStr}`);
+                resolve({ success: true });
+              } else if (attempts < maxAttempts) {
+                setTimeout(attempt, 500);
+              } else {
+                showToast('⚠️ 未能自动跳转，请手动调整播放进度');
+                resolve({ success: false, error: '跳转超时' });
+              }
+            }, 300);
+          } catch (e) {
+            if (attempts < maxAttempts) {
+              setTimeout(attempt, 500);
+            } else {
+              showToast('⚠️ 该平台暂不支持自动跳转，已打开页面');
+              resolve({ success: false, error: e.message });
+            }
+          }
+        } else if (attempts < maxAttempts) {
+          setTimeout(attempt, 500);
+        } else {
+          showToast('⚠️ 未检测到视频播放器，已打开页面');
+          resolve({ success: false, error: '未找到视频元素' });
+        }
+      };
+      attempt();
+    });
+
+    return trySeek();
+  }
+
   function init() {
+    setupMessageListener();
     setTimeout(() => {
       createFloatingButton();
       updateVideoState();
