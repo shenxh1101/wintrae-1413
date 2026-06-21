@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>学习进度管家</title>
+  <link rel="stylesheet" href="../common/styles.css">
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-left">
+        <div class="app-logo">📚</div>
+        <div>
+          <h1 class="app-title">学习进度管家</h1>
+          <div class="streak-badge" id="streakBadge">
+            <span class="streak-fire">🔥</span>
+            <span id="streakCount">0</span>天
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-icon" id="resumeBtn" title="继续上次学习">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="tabs" id="mainTabs">
+      <button class="tab active" data-tab="courses">课程</button>
+      <button class="tab" data-tab="planner">计划</button>
+      <button class="tab" data-tab="notes">笔记</button>
+      <button class="tab" data-tab="reminders">提醒</button>
+    </div>
+
+    <div class="tab-content">
+      <div class="tab-pane active" id="tab-courses">
+        <div class="filters-section">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            </svg>
+            <input type="text" id="searchInput" placeholder="搜索课程或章节..." class="search-input">
+          </div>
+          <div class="filter-chips" id="filterChips">
+            <button class="filter-chip active" data-filter="all">全部</button>
+            <button class="filter-chip" data-filter="inprogress">学习中</button>
+            <button class="filter-chip" data-filter="completed">已完成</button>
+            <button class="filter-chip" data-filter="overdue">已逾期</button>
+          </div>
+          <div class="platform-filter" id="platformFilter"></div>
+        </div>
+
+        <div class="course-list scrollbar" id="courseList">
+          <div class="empty-state">
+            <div class="empty-state-icon">📖</div>
+            <div class="empty-state-text">还没有保存的课程<br>在课程页面点击右下角按钮开始记录</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="tab-planner">
+        <div id="plannerContainer"></div>
+      </div>
+
+      <div class="tab-pane" id="tab-notes">
+        <div id="notesContainer"></div>
+      </div>
+
+      <div class="tab-pane" id="tab-reminders">
+        <div id="remindersContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalRoot"></div>
+
+  <script type="module" src="sidebar.js"></script>
+</body>
+</html>
